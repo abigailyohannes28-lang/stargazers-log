@@ -1,77 +1,103 @@
 #include "RP.h"
 #include <iostream>
-#include <cstdlib>
-#include <ctime>
 
 int main()
 {
     RP myRPclass;
     mraa_i2c_context fd = myRPclass.start_i2c_MaqueenPlus();
 
-    int leftSpd = 100;
-    int rightSpd = 100;
-
-    float leftDist, rightDist;
     int lineBits;
 
-    int colors[7] = {rpRED, rpGREEN, rpBLUE, rpYELLOW, rpPINK, rpCYAN, rpWHITE};
-    int used[7] = {0};
-    int idx, count = 0;
+    int baseSpd = 60;
+    int fastSpd = 80;
+    int slowSpd = 10;
+    int sharpTurnSpd = 5;
 
-    std::srand(std::time(0));
+    int lapCount = 0;
+    bool finishDetected = false;
 
-    std::cout << "Starting Task 4...\n";
+    int lostCounter = 0;
+    const int lostLimit = 200;
 
-    myRPclass.setRGB(fd, rpBOTH, rpRED);
-    myRPclass.RP_wait(0.5);
-    myRPclass.setRGB(fd, rpBOTH, rpGREEN);
-    myRPclass.RP_wait(0.5);
-    myRPclass.setRGB(fd, rpBOTH, rpBLUE);
-    myRPclass.RP_wait(0.5);
-    myRPclass.setRGB(fd, rpBOTH, rpYELLOW);
-    myRPclass.RP_wait(0.5);
-    myRPclass.setRGB(fd, rpBOTH, rpPINK);
-    myRPclass.RP_wait(0.5);
-    myRPclass.clearRGB(fd, rpBOTH);
+    std::cout << "Starting Task 5..." << std::endl;
 
-    lineBits = myRPclass.getLineBits(fd);
-    std::cout << "Line bits: " << lineBits << std::endl;
-
-    myRPclass.clearDistance(fd, rpLEFT);
-    myRPclass.clearDistance(fd, rpRIGHT);
-
-    myRPclass.motorControl(fd, rpLEFT, rpFORWARD, leftSpd);
-    myRPclass.motorControl(fd, rpRIGHT, rpFORWARD, rightSpd);
-    myRPclass.RP_wait(2.0);
-    myRPclass.motorControl(fd, rpLEFT, rpFORWARD, 0);
-    myRPclass.motorControl(fd, rpRIGHT, rpFORWARD, 0);
-
-    leftDist = myRPclass.getDistance(fd, rpLEFT);
-    rightDist = myRPclass.getDistance(fd, rpRIGHT);
-
-    std::cout << "Left distance: " << leftDist << std::endl;
-    std::cout << "Right distance: " << rightDist << std::endl;
-
-    myRPclass.motorControl(fd, rpLEFT, rpFORWARD, leftSpd);
-    myRPclass.motorControl(fd, rpRIGHT, rpFORWARD, rightSpd);
-
-    while (count < 5)
+    while (lapCount < 2)
     {
-        idx = std::rand() % 7;
+        lineBits = myRPclass.getLineBits(fd);
 
-        if (used[idx] == 0)
+        if (lineBits == 0x00)
         {
-            used[idx] = 1;
-            myRPclass.setRGB(fd, rpBOTH, colors[idx]);
-            myRPclass.RP_wait(0.5);
-            count++;
+            lostCounter++;
+
+            myRPclass.motorControl(fd, rpLEFT, rpFORWARD, 60);
+            myRPclass.motorControl(fd, rpRIGHT, rpFORWARD, 60);
+
+            if (lostCounter >= lostLimit)
+            {
+                std::cout << "Line lost for 2 seconds. Stopping program." << std::endl;
+                break;
+            }
         }
+        else
+        {
+            lostCounter = 0;
+
+            if (lineBits == 0x3F || lineBits == 0x1F || lineBits == 0x3E || lineBits == 0x1E)
+            {
+                if (!finishDetected)
+                {
+                    lapCount++;
+                    finishDetected = true;
+                    std::cout << "Lap: " << lapCount << std::endl;
+                }
+
+                myRPclass.motorControl(fd, rpLEFT, rpFORWARD, baseSpd);
+                myRPclass.motorControl(fd, rpRIGHT, rpFORWARD, baseSpd);
+            }
+            else if (lineBits == 0x0C)
+            {
+                finishDetected = false;
+                myRPclass.motorControl(fd, rpLEFT, rpFORWARD, baseSpd);
+                myRPclass.motorControl(fd, rpRIGHT, rpFORWARD, baseSpd);
+            }
+            else if (lineBits == 0x08 || lineBits == 0x04)
+            {
+                finishDetected = false;
+                myRPclass.motorControl(fd, rpLEFT, rpFORWARD, slowSpd);
+                myRPclass.motorControl(fd, rpRIGHT, rpFORWARD, fastSpd);
+            }
+            else if (lineBits == 0x06 || lineBits == 0x02 || lineBits == 0x03)
+            {
+                finishDetected = false;
+                myRPclass.motorControl(fd, rpLEFT, rpFORWARD, sharpTurnSpd);
+                myRPclass.motorControl(fd, rpRIGHT, rpFORWARD, fastSpd);
+            }
+            else if (lineBits == 0x10 || lineBits == 0x08)
+            {
+                finishDetected = false;
+                myRPclass.motorControl(fd, rpLEFT, rpFORWARD, fastSpd);
+                myRPclass.motorControl(fd, rpRIGHT, rpFORWARD, slowSpd);
+            }
+            else if (lineBits == 0x18 || lineBits == 0x20 || lineBits == 0x30)
+            {
+                finishDetected = false;
+                myRPclass.motorControl(fd, rpLEFT, rpFORWARD, fastSpd);
+                myRPclass.motorControl(fd, rpRIGHT, rpFORWARD, sharpTurnSpd);
+            }
+            else
+            {
+                finishDetected = false;
+                myRPclass.motorControl(fd, rpLEFT, rpFORWARD, baseSpd);
+                myRPclass.motorControl(fd, rpRIGHT, rpFORWARD, baseSpd);
+            }
+        }
+
+        myRPclass.RP_wait(0.005);
     }
 
     myRPclass.motorControl(fd, rpLEFT, rpFORWARD, 0);
     myRPclass.motorControl(fd, rpRIGHT, rpFORWARD, 0);
-    myRPclass.clearRGB(fd, rpBOTH);
 
-    std::cout << "Task 4 complete.\n";
+    std::cout << "Program ended." << std::endl;
     return 0;
 }
